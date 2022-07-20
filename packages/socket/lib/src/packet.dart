@@ -46,7 +46,7 @@ enum PacketType {
   binaryAck,
 }
 
-/// Represents a unit of data passed between a server and a client.
+/// Represents a message passed between a server and a client.
 abstract class Packet {
   /// The type of this packet.
   final PacketType type;
@@ -72,6 +72,36 @@ abstract class Packet {
 
   /// Gets the packet in its encoded format.
   String get encoded => '$_headEncoded$_bodyEncoded';
+}
+
+/// Fields that are part of the payload as defined in the socket.io protocol
+/// specification.
+class PayloadFields {
+  /// The data content of the packet.
+  static const data = 'data';
+
+  /// The session identifier of the client the packet was sent from.
+  static const sessionIdentifier = 'id';
+}
+
+/// Fields that can be a part of the data object sent with the payload, as
+/// defined in the socket.io protocol specification.
+class ConnectErrorDataFields {
+  /// An error message describing the reason for the connection error.
+  static const message = 'message';
+
+  /// Data passed together with the connection error.
+  static const data = 'data';
+}
+
+/// Fields that are not part of the socket.io protocol specification, but are
+/// used internally by this package for the parsing of binary packets.
+class BinaryPacketPayloadFields {
+  /// The number of binary attachments sent with a binary packet.
+  static const attachmentsCount = 'attachmentsCount';
+
+  /// The binary content of a binary packet.
+  static const binary = 'binary';
 }
 
 /// Represents a packet with additional binary data.
@@ -169,8 +199,8 @@ class ConnectErrorPacket extends Packet {
   @override
   String get _bodyEncoded {
     final data = <String, dynamic>{
-      'message': message,
-      if (this.data != null) 'data': this.data,
+      ConnectErrorDataFields.message: message,
+      if (this.data != null) ConnectErrorDataFields.data: this.data,
     };
 
     return json.encode(data);
@@ -295,29 +325,57 @@ class PacketPayloadRuleset {
 /// `PacketPayloadRuleset`s matched to `PacketType`s to verify that a packet's
 /// payload is valid.
 const Map<PacketType, PacketPayloadRuleset> packetPayloadRulesets = {
-  PacketType.connect: PacketPayloadRuleset(required: [], allowed: ['data']),
-  PacketType.disconnect: PacketPayloadRuleset(required: [], allowed: []),
+  PacketType.connect: PacketPayloadRuleset(
+    required: [],
+    allowed: [PayloadFields.data],
+  ),
+  PacketType.disconnect: PacketPayloadRuleset(
+    required: [],
+    allowed: [],
+  ),
   PacketType.event: PacketPayloadRuleset(
-    required: ['data'],
-    allowed: ['data', 'id'],
+    required: [PayloadFields.data],
+    allowed: [PayloadFields.data, PayloadFields.sessionIdentifier],
   ),
   PacketType.ack: PacketPayloadRuleset(
-    required: ['id'],
-    allowed: ['data', 'id'],
+    required: [PayloadFields.sessionIdentifier],
+    allowed: [PayloadFields.data, PayloadFields.sessionIdentifier],
   ),
   PacketType.connectError: PacketPayloadRuleset(
-    required: ['data'],
-    allowed: ['data'],
-    requiredData: ['message'],
-    allowedData: ['message', 'data'],
+    required: [PayloadFields.data],
+    allowed: [PayloadFields.data],
+    requiredData: [ConnectErrorDataFields.message],
+    allowedData: [
+      ConnectErrorDataFields.message,
+      ConnectErrorDataFields.data,
+    ],
   ),
   PacketType.binaryEvent: PacketPayloadRuleset(
-    required: ['attachmentsCount', 'data', 'buffer'],
-    allowed: ['attachmentsCount', 'data', 'id', 'buffer'],
+    required: [
+      BinaryPacketPayloadFields.attachmentsCount,
+      BinaryPacketPayloadFields.binary,
+      PayloadFields.data,
+    ],
+    allowed: [
+      BinaryPacketPayloadFields.attachmentsCount,
+      BinaryPacketPayloadFields.binary,
+      PayloadFields.data,
+      PayloadFields.sessionIdentifier,
+    ],
   ),
   PacketType.binaryAck: PacketPayloadRuleset(
-    required: ['attachmentsCount', 'data', 'id', 'buffer'],
-    allowed: ['attachmentsCount', 'data', 'id', 'buffer'],
+    required: [
+      BinaryPacketPayloadFields.attachmentsCount,
+      BinaryPacketPayloadFields.binary,
+      PayloadFields.data,
+      PayloadFields.sessionIdentifier,
+    ],
+    allowed: [
+      BinaryPacketPayloadFields.attachmentsCount,
+      BinaryPacketPayloadFields.binary,
+      PayloadFields.data,
+      PayloadFields.sessionIdentifier,
+    ],
   ),
 };
 
@@ -326,36 +384,38 @@ const Map<PacketType, PacketPayloadRuleset> packetPayloadRulesets = {
 final Map<PacketType, PacketConstructor> packetConstructors = {
   PacketType.connect: (namespace, data) => ConnectPacket(
         namespace: namespace,
-        data: data['data'] as Object?,
+        data: data[PayloadFields.data] as Object?,
       ),
   PacketType.disconnect: (namespace, _) =>
       DisconnectPacket(namespace: namespace),
   PacketType.event: (namespace, data) => EventPacket(
         namespace: namespace,
-        data: data['data'] as Object,
-        id: data['id'] as int?,
+        data: data[PayloadFields.data] as Object,
+        id: data[PayloadFields.sessionIdentifier] as int?,
       ),
   PacketType.ack: (namespace, data) => AckPacket(
         namespace: namespace,
-        data: data['data'] as Object?,
-        id: data['id'] as int,
+        data: data[PayloadFields.data] as Object?,
+        id: data[PayloadFields.sessionIdentifier] as int,
       ),
   PacketType.connectError: (namespace, data) => ConnectErrorPacket(
         namespace: namespace,
-        message: data['data']['message'] as String,
-        data: data['data']?['data'] as Object?,
+        message:
+            data[PayloadFields.data][ConnectErrorDataFields.message] as String,
+        data: data[PayloadFields.data]?[ConnectErrorDataFields.message]
+            as Object?,
       ),
   PacketType.binaryEvent: (namespace, data) => BinaryEventPacket(
         namespace: namespace,
-        data: data['data'] as Object,
-        buffer: data['buffer'] as List<int>,
-        id: data['id'] as int?,
+        data: data[PayloadFields.data] as Object,
+        buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
+        id: data[PayloadFields.sessionIdentifier] as int?,
       ),
   PacketType.binaryAck: (namespace, data) => BinaryAckPacket(
         namespace: namespace,
-        data: data['data'] as Object,
-        buffer: data['buffer'] as List<int>,
-        id: data['id'] as int,
+        data: data[PayloadFields.data] as Object,
+        buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
+        id: data[PayloadFields.sessionIdentifier] as int,
       ),
 };
 
@@ -402,10 +462,11 @@ Future<Either<Packet, String>> decodePacket(
   final attachmentsCount = groups[1] == null ? null : int.parse(groups[1]!);
 
   final payload = <String, dynamic>{
-    'attachmentsCount': attachmentsCount,
-    if (attachmentsCount != null) 'buffer': <int>[],
-    'id': groups[3] == null ? null : int.parse(groups[3]!),
-    'data': data,
+    PayloadFields.sessionIdentifier:
+        groups[3] == null ? null : int.parse(groups[3]!),
+    PayloadFields.data: data,
+    BinaryPacketPayloadFields.attachmentsCount: attachmentsCount,
+    if (attachmentsCount != null) BinaryPacketPayloadFields.binary: <int>[],
   };
 
   final ruleset = packetPayloadRulesets[packetType]!;
@@ -425,7 +486,7 @@ Future<Either<Packet, String>> decodePacket(
     if (attachmentsCount == 0) {
       return const Right(
         'A packet of type BINARY_EVENT or BINARY_ACK must feature binary data.'
-        ' Consider using an EVENT or ACK packet respectively.',
+        ' Instead, consider using an EVENT or ACK packet respectively.',
       );
     }
 
@@ -436,7 +497,7 @@ Future<Either<Packet, String>> decodePacket(
       buffer.addAll(bytes);
     }
 
-    payload['buffer'] = buffer;
+    payload[BinaryPacketPayloadFields.binary] = buffer;
   }
 
   final packet = packetConstructors[packetType]!(namespace, payload);
