@@ -74,7 +74,7 @@ abstract class Packet {
   String get encoded => '$_headEncoded$_bodyEncoded';
 }
 
-/// Fields that are part of the payload as defined in the socket.io protocol
+/// Fields that are part of the payload, as defined in the socket.io protocol
 /// specification.
 class PayloadFields {
   /// The data content of the packet.
@@ -90,7 +90,7 @@ class ConnectErrorDataFields {
   /// An error message describing the reason for the connection error.
   static const message = 'message';
 
-  /// Data passed together with the connection error.
+  /// The data passed together with the connection error.
   static const data = 'data';
 }
 
@@ -381,43 +381,45 @@ const Map<PacketType, PacketPayloadRuleset> packetPayloadRulesets = {
 
 /// `PacketConstructor`s matched to `PacketType`s to create an instance of the
 /// respective packet.
-final Map<PacketType, PacketConstructor> packetConstructors = {
-  PacketType.connect: (namespace, data) => ConnectPacket(
-        namespace: namespace,
-        data: data[PayloadFields.data] as Object?,
-      ),
-  PacketType.disconnect: (namespace, _) =>
-      DisconnectPacket(namespace: namespace),
-  PacketType.event: (namespace, data) => EventPacket(
-        namespace: namespace,
-        data: data[PayloadFields.data] as Object,
-        id: data[PayloadFields.sessionIdentifier] as int?,
-      ),
-  PacketType.ack: (namespace, data) => AckPacket(
-        namespace: namespace,
-        data: data[PayloadFields.data] as Object?,
-        id: data[PayloadFields.sessionIdentifier] as int,
-      ),
-  PacketType.connectError: (namespace, data) => ConnectErrorPacket(
-        namespace: namespace,
-        message:
-            data[PayloadFields.data][ConnectErrorDataFields.message] as String,
-        data: data[PayloadFields.data]?[ConnectErrorDataFields.message]
-            as Object?,
-      ),
-  PacketType.binaryEvent: (namespace, data) => BinaryEventPacket(
-        namespace: namespace,
-        data: data[PayloadFields.data] as Object,
-        buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
-        id: data[PayloadFields.sessionIdentifier] as int?,
-      ),
-  PacketType.binaryAck: (namespace, data) => BinaryAckPacket(
-        namespace: namespace,
-        data: data[PayloadFields.data] as Object,
-        buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
-        id: data[PayloadFields.sessionIdentifier] as int,
-      ),
-};
+final Map<PacketType, PacketConstructor> packetConstructors = Map.unmodifiable(
+  <PacketType, PacketConstructor>{
+    PacketType.connect: (namespace, data) => ConnectPacket(
+          namespace: namespace,
+          data: data[PayloadFields.data] as Object?,
+        ),
+    PacketType.disconnect: (namespace, _) =>
+        DisconnectPacket(namespace: namespace),
+    PacketType.event: (namespace, data) => EventPacket(
+          namespace: namespace,
+          data: data[PayloadFields.data] as Object,
+          id: data[PayloadFields.sessionIdentifier] as int?,
+        ),
+    PacketType.ack: (namespace, data) => AckPacket(
+          namespace: namespace,
+          data: data[PayloadFields.data] as Object?,
+          id: data[PayloadFields.sessionIdentifier] as int,
+        ),
+    PacketType.connectError: (namespace, data) => ConnectErrorPacket(
+          namespace: namespace,
+          message: data[PayloadFields.data][ConnectErrorDataFields.message]
+              as String,
+          data: data[PayloadFields.data]?[ConnectErrorDataFields.message]
+              as Object?,
+        ),
+    PacketType.binaryEvent: (namespace, data) => BinaryEventPacket(
+          namespace: namespace,
+          data: data[PayloadFields.data] as Object,
+          buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
+          id: data[PayloadFields.sessionIdentifier] as int?,
+        ),
+    PacketType.binaryAck: (namespace, data) => BinaryAckPacket(
+          namespace: namespace,
+          data: data[PayloadFields.data] as Object,
+          buffer: data[BinaryPacketPayloadFields.binary] as List<int>,
+          id: data[PayloadFields.sessionIdentifier] as int,
+        ),
+  },
+);
 
 /// Attempts to decode a string into a `Packet`, returning a `Packet` if
 /// succeeded, and an error message otherwise.
