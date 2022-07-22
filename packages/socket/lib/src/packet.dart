@@ -439,20 +439,21 @@ Future<Either<Packet, String>> decodePacket(
 
   final dataString = groups[4];
   final Option<Either<Map<String, dynamic>, List<dynamic>>> dataOption;
-  try {
-    if (dataString == null) {
-      dataOption = const None();
-    } else {
-      final decoded = json.decode(dataString) as Object;
-
-      if (decoded is Map) {
-        dataOption = Some(Either.left(Map<String, dynamic>.from(decoded)));
-      } else {
-        dataOption = Some(Either.right(List<dynamic>.from(decoded as List)));
-      }
+  if (dataString == null) {
+    dataOption = const None();
+  } else {
+    final Object decoded;
+    try {
+      decoded = json.decode(dataString) as Object;
+    } on FormatException catch (_) {
+      return const Right('The packet data object is not valid JSON.');
     }
-  } on FormatException {
-    return const Right('The packet data object is not valid JSON.');
+
+    if (decoded is Map) {
+      dataOption = Some(Either.left(Map<String, dynamic>.from(decoded)));
+    } else {
+      dataOption = Some(Either.right(List<dynamic>.from(decoded as List)));
+    }
   }
 
   final data = dataOption.match(
