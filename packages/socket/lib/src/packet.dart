@@ -432,6 +432,8 @@ Future<Either<Packet, String>> decodePacket(
     return const Right('The packet is invalid.');
   }
 
+  // Groups extracted from the encoded packet. It is safe to cast them directly
+  // to their respective types as the regular expression rejects invalid data.
   final groups = regexMatch.groups([1, 2, 3, 4, 5]);
 
   final packetType = PacketType.values[int.parse(groups[0]!)];
@@ -442,17 +444,17 @@ Future<Either<Packet, String>> decodePacket(
   if (dataString == null) {
     dataOption = const None();
   } else {
-    final Object decoded;
+    final Object data;
     try {
-      decoded = json.decode(dataString) as Object;
+      data = json.decode(dataString) as Object;
     } on FormatException catch (_) {
       return const Right('The packet data object is not valid JSON.');
     }
 
-    if (decoded is Map) {
-      dataOption = Some(Either.left(Map<String, dynamic>.from(decoded)));
+    if (data is Map) {
+      dataOption = Some(Either.left(Map<String, dynamic>.from(data)));
     } else {
-      dataOption = Some(Either.right(List<dynamic>.from(decoded as List)));
+      dataOption = Some(Either.right(List<dynamic>.from(data as List)));
     }
   }
 
@@ -503,7 +505,17 @@ Future<Either<Packet, String>> decodePacket(
     payload[BinaryPacketPayloadFields.binary] = buffer;
   }
 
-  final packet = packetConstructors[packetType]!(namespace, payload);
+  final Packet packet;
+  // It is necessary to perform a `TypeError` check here because we do not know
+  // at runtime what the type of one of the fields of [payload.data] will be.
+  try {
+    packet = packetConstructors[packetType]!(namespace, payload);
+    // ignore: avoid_catching_errors
+  } on TypeError {
+    return const Right(
+      'The packet payload contains a value of an invalid type.',
+    );
+  }
 
   return Left(packet);
 }
